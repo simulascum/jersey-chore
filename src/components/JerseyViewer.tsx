@@ -4,9 +4,9 @@ import { OrbitControls } from '@react-three/drei'
 import { MapContainer, TileLayer } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import * as THREE from 'three'
-import { Jersey, type JerseyAPI, type PaintOptions } from './Jersey'
+import { Jersey, type JerseyAPI, type ZoneConfig, type OverlayOptions, type PatternType } from './Jersey'
 
-const MODEL_PATH = '/football_shirt.glb'
+const MODEL_PATH = `${import.meta.env.BASE_URL}football_shirt.glb`
 const NYC_CENTER: [number, number] = [40.758, -73.9855]
 
 // Animated shadow disc on the ground
@@ -160,23 +160,29 @@ export function JerseyViewer() {
 
   const clearDecal = useCallback(() => setDecalImg(null), [])
 
-  const zoneColors = useMemo(() => ({
-    front: frontColor,
-    back: backColor,
-    sleeveR: sleeveColor,
-    sleeveL: sleeveColor,
-    cuff: cuffColor,
-    collar: collarColor,
-    hem: hemColor,
-    trim: trimColor,
-  }), [frontColor, backColor, sleeveColor, collarColor, cuffColor, hemColor, trimColor])
+  const patternZones = ['front', 'back', 'right_sleeve', 'left_sleeve']
 
-  const paintOptions = useMemo<PaintOptions>(() => ({
-    pattern: pattern !== 'none' ? {
-      type: pattern,
-      color: patternColor,
-      zones: ['front', 'back', 'sleeveR', 'sleeveL'],
-    } : undefined,
+  const zoneConfigs = useMemo<Record<string, ZoneConfig>>(() => {
+    const cfg = (color: string, zone: string): ZoneConfig => ({
+      color,
+      pattern: (patternZones.includes(zone) ? pattern : 'none') as PatternType,
+      patternColor: patternColor,
+    })
+    return {
+      front: cfg(frontColor, 'front'),
+      back: cfg(backColor, 'back'),
+      right_sleeve: cfg(sleeveColor, 'right_sleeve'),
+      left_sleeve: cfg(sleeveColor, 'left_sleeve'),
+      right_cuff: cfg(cuffColor, 'right_cuff'),
+      left_cuff: cfg(cuffColor, 'left_cuff'),
+      front_hem: cfg(hemColor, 'front_hem'),
+      back_hem: cfg(collarColor, 'back_hem'),
+      back_collar: cfg(trimColor, 'back_collar'),
+      front_collar: cfg(trimColor, 'front_collar'),
+    }
+  }, [frontColor, backColor, sleeveColor, collarColor, cuffColor, hemColor, trimColor, pattern, patternColor])
+
+  const overlays = useMemo<OverlayOptions>(() => ({
     decal: decalImg ? {
       image: decalImg,
       color: decalColor,
@@ -190,7 +196,7 @@ export function JerseyViewer() {
       x: 24,
       y: 35,
     } : undefined,
-  }), [jerseyNumber, numberColor, decalImg, decalColor, decalScale, pattern, patternColor])
+  }), [jerseyNumber, numberColor, decalImg, decalColor, decalScale])
 
   const resetTexture = useCallback(() => {
     jerseyApiRef.current?.reset()
@@ -237,8 +243,8 @@ export function JerseyViewer() {
             <FloatingGroup>
               <Jersey
                 modelPath={MODEL_PATH}
-                zoneColors={zoneColors}
-                options={paintOptions}
+                zoneConfigs={zoneConfigs}
+                overlays={overlays}
                 onReady={handleJerseyReady}
               />
             </FloatingGroup>

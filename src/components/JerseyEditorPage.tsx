@@ -4,7 +4,7 @@ import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { Jersey, DEFAULT_ZONE_CONFIGS, type JerseyAPI, type Zone, type ZoneConfig, type PatternType } from './Jersey'
 
-const MODEL_PATH = '/football_shirt.glb'
+const MODEL_PATH = `${import.meta.env.BASE_URL}football_shirt.glb`
 
 const ALL_ZONES = Object.keys(DEFAULT_ZONE_CONFIGS) as Zone[]
 const PATTERN_OPTIONS: PatternType[] = ['none', 'chevrons', 'stripes', 'dots']
