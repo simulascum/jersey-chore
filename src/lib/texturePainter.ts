@@ -7,8 +7,8 @@ const TEX_SIZE = 2048
 export interface NumberOptions {
   text: string
   color: string
-  x: number
-  y: number
+  zone: string
+  scale: number
 }
 
 export interface DecalOptions {
@@ -84,7 +84,7 @@ export class TexturePainter {
 
     // Number
     if (overlays?.number && overlays.number.text.trim()) {
-      this.drawNumber(overlays.number)
+      this.drawNumber(data, islandToZone, overlays.number)
     }
   }
 
@@ -186,14 +186,42 @@ export class TexturePainter {
     ctx.restore()
   }
 
-  private drawNumber(num: NumberOptions): void {
+  private drawNumber(
+    data: UVIslandData,
+    islandToZone: Record<number, string>,
+    num: NumberOptions,
+  ): void {
     const { ctx, size } = this
-    const x = (num.x / 100) * size
-    const y = (num.y / 100) * size
+    const { triToIsland, triCount, uvs, index } = data
+
+    // Find the island ID for the target zone
+    let targetIsland = -1
+    for (const [id, zone] of Object.entries(islandToZone)) {
+      if (zone === num.zone) { targetIsland = Number(id); break }
+    }
+    if (targetIsland === -1) return
+
+    // Compute island bounding box
+    let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity
+    for (let t = 0; t < triCount; t++) {
+      if (triToIsland[t] !== targetIsland) continue
+      for (let j = 0; j < 3; j++) {
+        const vi = index ? index.getX(t * 3 + j) : t * 3 + j
+        const u = uvs.getX(vi), v = uvs.getY(vi)
+        minU = Math.min(minU, u); maxU = Math.max(maxU, u)
+        minV = Math.min(minV, v); maxV = Math.max(maxV, v)
+      }
+    }
+
+    const centerX = ((minU + maxU) / 2) * size
+    const centerY = ((minV + maxV) / 2) * size
+    const zoneH = (maxV - minV) * size
+    const fontSize = Math.round(zoneH * (num.scale / 100))
+
     ctx.save()
-    ctx.translate(x, y)
+    ctx.translate(centerX, centerY)
     ctx.scale(1, -1)
-    ctx.font = `bold 400px Impact, "Arial Black", sans-serif`
+    ctx.font = `bold ${fontSize}px Impact, "Arial Black", sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = num.color

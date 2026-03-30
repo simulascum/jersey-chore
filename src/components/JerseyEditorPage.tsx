@@ -2,7 +2,7 @@ import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { Jersey, DEFAULT_ZONE_CONFIGS, type JerseyAPI, type Zone, type ZoneConfig, type PatternType } from './Jersey'
+import { Jersey, DEFAULT_ZONE_CONFIGS, type JerseyAPI, type Zone, type ZoneConfig, type PatternType, type OverlayOptions } from './Jersey'
 
 const MODEL_PATH = `${import.meta.env.BASE_URL}football_shirt.glb`
 
@@ -18,8 +18,16 @@ export function JerseyEditorPage() {
   const [configs, setConfigs] = useState<Record<Zone, ZoneConfig>>(
     () => ({ ...DEFAULT_ZONE_CONFIGS }),
   )
+  const [numberText, setNumberText] = useState('')
+  const [numberColor, setNumberColor] = useState('#ffffff')
+  const [numberScale, setNumberScale] = useState(80)
 
   const zoneConfigs = useMemo(() => ({ ...configs }), [configs])
+
+  const overlays = useMemo<OverlayOptions | undefined>(() => {
+    if (!numberText) return undefined
+    return { number: { text: numberText, color: numberColor, zone: 'back', scale: numberScale } }
+  }, [numberText, numberColor, numberScale])
 
   const handleJerseyReady = useCallback((api: JerseyAPI) => {
     jerseyApiRef.current = api
@@ -59,7 +67,44 @@ export function JerseyEditorPage() {
           zIndex: 10,
         }}
       >
-        <h2 style={{ color: '#fff', margin: '0 0 8px', fontSize: 18 }}>Zone Config</h2>
+        <h2 style={{ color: '#fff', margin: '0 0 8px', fontSize: 18 }}>Number</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={3}
+            placeholder="#"
+            value={numberText}
+            onChange={(e) => setNumberText(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+            style={{
+              flex: 1,
+              fontSize: 14,
+              padding: '6px 8px',
+              background: '#1a1a1a',
+              color: '#fff',
+              border: '1px solid #333',
+              borderRadius: 4,
+            }}
+          />
+          <input
+            type="color"
+            value={numberColor}
+            onChange={(e) => setNumberColor(e.target.value)}
+            style={{ width: 36, height: 28, border: 'none', cursor: 'pointer', background: 'none' }}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ color: '#888', fontSize: 12 }}>Size</label>
+          <input
+            type="range"
+            min={20}
+            max={100}
+            value={numberScale}
+            onChange={(e) => setNumberScale(Number(e.target.value))}
+            style={{ flex: 1 }}
+          />
+        </div>
+        <h2 style={{ color: '#fff', margin: '12px 0 8px', fontSize: 18 }}>Zone Config</h2>
         {ALL_ZONES.map((zone) => (
           <div key={zone} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -134,7 +179,7 @@ export function JerseyEditorPage() {
         <directionalLight position={[2, 4, 2]} intensity={1.4} />
         <directionalLight position={[-2, 1, -1]} intensity={0.45} />
         <Suspense fallback={null}>
-          <Jersey modelPath={MODEL_PATH} zoneConfigs={zoneConfigs} onReady={handleJerseyReady} />
+          <Jersey modelPath={MODEL_PATH} zoneConfigs={zoneConfigs} overlays={overlays} onReady={handleJerseyReady} />
         </Suspense>
         <OrbitControls
           enableDamping
