@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>UV Island Debug</title>
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/" } }
+  </script>
+  <style>
+    body { background: #111; color: #fff; font-family: monospace; padding: 20px; }
+    #log { white-space: pre-wrap; margin-top: 20px; font-size: 13px; line-height: 1.6; }
+    canvas { border: 1px solid #444; margin-top: 10px; max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h2>UV Island Debug Tool</h2>
+  <p>Drop a .glb file here or use the button:</p>
+  <input type="file" id="fileInput" accept=".glb">
+  <div id="log"></div>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+
+    const log = document.getElementById('log')
+    const write = (msg) => { log.textContent += msg + '\n' }
+
+    function debugGLB(buffer, filename) {
+      log.textContent = ''
+      write(`Loading ${filename}...`)
+
+      const loader = new GLTFLoader()
+      loader.parse(buffer, '', (gltf) => {
+        let mesh = null
+        gltf.scene.traverse((child) => {
+          if (child.isMesh && !mesh) mesh = child
+        })
+
+        if (!mesh) { write('No mesh found!'); return }
+
+        const geo = mesh.geometry
+        const uv = geo.attributes.uv
+        const index = geo.index
+
+        if (!uv) { write('No UV coordinates found!'); return }
+
+        write(`Mesh: ${mesh.name || '(unnamed)'}`)
+        write(`Vertices: ${uv.count}, Indexed: ${!!index}`)
+
+        const triCount = index ? index.count / 3 : uv.count / 3
+        write(`Triangles: ${triCount}`)
+
+        // Flood-fill island detection
+        const triToIsland = new Int32Array(triCount).fill(-1)
+        const vertToTris = Array.from({ length: uv.count }, () => [])
+        for (let t = 0; t < triCount; t++) {
+          for (let j = 0; j < 3; j++) {
+            const vi = index ? index.getX(t * 3 + j) : t * 3 + j
+            vertToTris[vi].push(t)
+          }
+        }
+
+        let islandCount = 0
+        for (let t = 0; t < triCount; t++) {
+          if (triToIsland[t] >= 0) continue
+          const id = islandCount++
+          const stack = [t]
+          while (stack.length) {
+            const cur = stack.pop()
+            if (triToIsland[cur] >= 0) continue
+            triToIsland[cur] = id
+            for (let j = 0; j < 3; j++) {
+              const vi = index ? index.getX(cur * 3 + j) : cur * 3 + j
+              for (const neighbor of vertToTris[vi]) {
+                if (triToIsland[neighbor] < 0) stack.push(neighbor)
+              }
+            }
+          }
+        }
+
+        write(`\nFound ${islandCount} UV islands\n`)
+
+        const colors = [
+          '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+          '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
+          '#469990', '#dcbeff', '#9A6324', '#fffac8', '#800000',
+          '#aaffc3', '#808000', '#ffd8b1', '#000075', '#a9a9a9',
+        ]
+
+        const sz = 2048
+        const c = document.createElement('canvas')
+        c.width = sz; c.height = sz
+        const ctx = c.getContext('2d')
+        ctx.fillStyle = '#111'
+        ctx.fillRect(0, 0, sz, sz)
+
+        // Also create a 3D preview texture canvas
+        const tc = document.createElement('canvas')
+        tc.width = sz; tc.height = sz
+        const tctx = tc.getContext('2d')
+        tctx.fillStyle = '#222'
+        tctx.fillRect(0, 0, sz, sz)
+
+        const bounds = Array.from({ length: islandCount }, () => ({
+          minU: Infinity, maxU: -Infinity, minV: Infinity, maxV: -Infinity, triCount: 0
+        }))
+
+        for (let t = 0; t < triCount; t++) {
+          const id = triToIsland[t]
+          const col = colors[id % colors.length]
+          const i0 = index ? index.getX(t * 3) : t * 3
+          const i1 = index ? index.getX(t * 3 + 1) : t * 3 + 1
+          const i2 = index ? index.getX(t * 3 + 2) : t * 3 + 2
+          const u0 = uv.getX(i0), v0 = uv.getY(i0)
+          const u1 = uv.getX(i1), v1 = uv.getY(i1)
+          const u2 = uv.getX(i2), v2 = uv.getY(i2)
+
+          const b = bounds[id]
+          b.triCount++
+          for (const u of [u0, u1, u2]) { b.minU = Math.min(b.minU, u); b.maxU = Math.max(b.maxU, u) }
+          for (const v of [v0, v1, v2]) { b.minV = Math.min(b.minV, v); b.maxV = Math.max(b.maxV, v) }
+
+          for (const cx2 of [ctx, tctx]) {
+            cx2.fillStyle = col
+            cx2.beginPath()
+            cx2.moveTo(u0 * sz, v0 * sz)
+            cx2.lineTo(u1 * sz, v1 * sz)
+            cx2.lineTo(u2 * sz, v2 * sz)
+            cx2.closePath()
+            cx2.fill()
+          }
+        }
+
+        // Labels
+        ctx.font = 'bold 40px monospace'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        for (let id = 0; id < islandCount; id++) {
+          const b = bounds[id]
+          if (b.triCount <= 10) continue
+          const cx2 = ((b.minU + b.maxU) / 2) * sz
+          const cy = ((b.minV + b.maxV) / 2) * sz
+          ctx.fillStyle = '#000'
+          ctx.fillRect(cx2 - 30, cy - 22, 60, 44)
+          ctx.fillStyle = '#fff'
+          ctx.fillText(`#${id}`, cx2, cy)
+          write(`Island #${id}: ${b.triCount} tris, UV [${(b.minU*100).toFixed(0)}%-${(b.maxU*100).toFixed(0)}%] x [${(b.minV*100).toFixed(0)}%-${(b.maxV*100).toFixed(0)}%], color: ${colors[id % colors.length]}`)
+        }
+
+        // Grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)'
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'
+        ctx.font = '24px monospace'
+        ctx.textAlign = 'left'
+        for (let p = 0; p <= 100; p += 10) {
+          const px = (p / 100) * sz
+          ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, sz); ctx.stroke()
+          ctx.beginPath(); ctx.moveTo(0, px); ctx.lineTo(sz, px); ctx.stroke()
+          ctx.fillText(`${p}%`, px + 4, 20)
+          ctx.fillText(`${p}%`, 4, px + 20)
+        }
+
+        // Show inline
+        document.body.appendChild(c)
+
+        // Auto-download
+        const a = document.createElement('a')
+        a.download = `uv-islands-${filename.replace('.glb', '')}.png`
+        a.href = c.toDataURL('image/png')
+        a.click()
+
+        // Also render 3D preview with colored texture
+        const scene = new THREE.Scene()
+        scene.add(new THREE.AmbientLight(0xffffff, 0.9))
+        scene.add(new THREE.DirectionalLight(0xffffff, 1.5))
+
+        const tex = new THREE.CanvasTexture(tc)
+        tex.flipY = false
+        mesh.material = new THREE.MeshStandardMaterial({ map: tex })
+
+        scene.add(gltf.scene)
+
+        const box = new THREE.Box3().setFromObject(gltf.scene)
+        const size = box.getSize(new THREE.Vector3())
+        const maxDim = Math.max(size.x, size.y, size.z)
+        gltf.scene.scale.setScalar(3 / maxDim)
+
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
+        camera.position.set(0, 2, 4)
+        camera.lookAt(0, 1, 0)
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true })
+        renderer.setSize(512, 512)
+        document.body.appendChild(renderer.domElement)
+        renderer.render(scene, camera)
+
+        write('\n✅ Done! Check the UV map above and the downloaded PNG.')
+      })
+    }
+
+    // File input
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0]
+      if (!file) return
+      file.arrayBuffer().then(buf => debugGLB(buf, file.name))
+    })
+
+    // Drag & drop
+    document.body.addEventListener('dragover', (e) => e.preventDefault())
+    document.body.addEventListener('drop', (e) => {
+      e.preventDefault()
+      const file = e.dataTransfer.files[0]
+      if (file) file.arrayBuffer().then(buf => debugGLB(buf, file.name))
+    })
+  </script>
+</body>
+</html>
