@@ -54,6 +54,10 @@ export function JerseyEditorPage() {
     jerseyApiRef.current?.exportDebugUVMap('jersey-uv-debug.png')
   }, [])
 
+  const handleExportTexture = useCallback(() => {
+    jerseyApiRef.current?.exportTexture('jersey-texture.png')
+  }, [])
+
   const handleColorChange = useCallback((zone: Zone, value: string) => {
     setConfigs((prev) => ({ ...prev, [zone]: { ...prev[zone], color: value } }))
   }, [])
@@ -321,6 +325,22 @@ export function JerseyEditorPage() {
             }}
           >
             Export UV Map
+          </button>
+          <button
+            onClick={handleExportTexture}
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              border: '1px solid #333',
+              borderRadius: 8,
+              background: '#1a1a1a',
+              color: '#fff',
+              fontWeight: 600,
+              cursor: 'pointer',
+              marginTop: 8,
+            }}
+          >
+            Export Texture PNG
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <input

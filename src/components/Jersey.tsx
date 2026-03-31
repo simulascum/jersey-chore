@@ -51,6 +51,7 @@ export const DEFAULT_ZONE_CONFIGS = Object.fromEntries(
 export interface JerseyAPI {
   reset: () => void
   exportDebugUVMap: (filename?: string) => void
+  exportTexture: (filename?: string) => void
 }
 
 export interface OverlayOptions {
@@ -111,6 +112,16 @@ export function Jersey({ modelPath, zoneConfigs, overlays, onReady }: JerseyProp
     painter.downloadDebugMap(data, filename)
   }, [])
 
+  const exportTexture = useCallback((filename = 'jersey-texture.png') => {
+    const painter = painterRef.current
+    if (!painter) return
+    const dataUrl = painter.canvas.toDataURL('image/png')
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = filename
+    a.click()
+  }, [])
+
   useEffect(() => {
     let found: THREE.Mesh | null = null
 
@@ -166,8 +177,8 @@ export function Jersey({ modelPath, zoneConfigs, overlays, onReady }: JerseyProp
     paintDebugBaseline()
 
     // Notify parent
-    onReady?.({ reset, exportDebugUVMap })
-  }, [scene, onReady, paintDebugBaseline, reset, exportDebugUVMap])
+    onReady?.({ reset, exportDebugUVMap, exportTexture })
+  }, [scene, onReady, paintDebugBaseline, reset, exportDebugUVMap, exportTexture])
 
   return <primitive object={scene} />
 }
